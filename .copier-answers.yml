@@ -1,0 +1,18 @@
+# Changes here will be overwritten by Copier; NEVER EDIT MANUALLY
+_commit: v2.0.0
+_src_path: https://github.com/napari/napari-plugin-template
+display_name: Synaptogram
+email: buran@ohsu.edu
+full_name: Brad Buran
+github_repository_url: https://github.com/bburan/napari-synaptogram
+github_username_or_organization: bburan
+include_reader_plugin: true
+include_sample_data_plugin: true
+include_widget_plugin: true
+include_writer_plugin: true
+install_dependabot: true
+install_precommit: true
+license: MIT
+module_name: napari_synaptogram
+plugin_name: napari-synaptogram
+short_description: Evaluate synapse ribbon counts in confocal data
