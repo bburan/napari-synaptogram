@@ -26,16 +26,19 @@ class CtBP2Detection(Container):
         self._xy_button = PushButton(text="XY")
         self._xz_button = PushButton(text="XZ")
         self._yz_button = PushButton(text="YZ")
+        self._auto_contrast_button = PushButton(text="Auto Contrast")
         self._max_proj_checkbox = CheckBox(text="Max. Proj.", value=False)
         self._xy_button.clicked.connect(lambda: self._update_dims([2, 1, 0]))
         self._xz_button.clicked.connect(lambda: self._update_dims([0, 2, 1]))
         self._yz_button.clicked.connect(lambda: self._update_dims([1, 2, 0]))
         self._max_proj_checkbox.changed.connect(self._update_projection)
+        self._auto_contrast_button.clicked.connect(self._auto_contrast)
 
         row = [
             self._xy_button,
             self._xz_button,
             self._yz_button,
+            self._auto_contrast_button,
             self._max_proj_checkbox,
         ]
         self._xyz_container = Container(widgets=row, layout="horizontal")
@@ -66,15 +69,21 @@ class CtBP2Detection(Container):
                 self._process_container,
             ]
         )
+        self._viewer.layers.events.inserted.connect(
+            self._rescan_layers, position="last"
+        )
+        self._viewer.layers.events.removed.connect(
+            self._rescan_layers, position="last"
+        )
+        self._handling_points = False
+
+    def _rescan_layers(self):
         self._roi_map = {}
         for layer in self._viewer.layers:
             if isinstance(layer, Points):
                 layer.mouse_drag_callbacks.append(self._mouse_click)
-            if isinstance(layer, Image):
-                layer.projection_mode = "max"
-                layer.contrast_limits = np.percentile(layer.data, [0, 99.99])
-                if "masked" not in layer.name:
-                    self._roi_map[layer] = None
+            if isinstance(layer, Image) and "masked" not in layer.name:
+                self._roi_map[layer] = None
 
         # Now, reconnect any masked layers that may exist.
         for src_layer in self._roi_map:
@@ -85,11 +94,18 @@ class CtBP2Detection(Container):
                     break
 
             # Make sure we set values accordingly
-            if src_layer.name.lower().endswith("ctbp2"):
-                if self._roi_map[src_layer] is None:
-                    self._image_layer_combo.value = src_layer
-                else:
-                    self._image_layer_combo.value = self._roi_map[src_layer]
+            # if src_layer.name.lower().endswith("ctbp2"):
+            #    if self._roi_map[src_layer] is None:
+            #        self._image_layer_combo.value = src_layer
+            #    else:
+            #        self._image_layer_combo.value = self._roi_map[src_layer]
+        self._update_projection()
+
+    def _auto_contrast(self):
+        for layer in self._viewer.layers:
+            if isinstance(layer, Image):
+                layer.projection_mode = "max"
+                layer.contrast_limits = np.percentile(layer.data, [0, 99.99])
 
     def _mask(self):
         roi_layer = self._roi_layer_combo.value
@@ -154,6 +170,9 @@ class CtBP2Detection(Container):
         self._viewer.dims.order = order
 
     def _detect_points(self):
+        """
+        Scans for points and adds them as a new layer
+        """
         image_layer = self._image_layer_combo.value
         if image_layer is None:
             return
@@ -173,8 +192,6 @@ class CtBP2Detection(Container):
                 symbol="o",
                 out_of_slice_display=True,
             )
-            layer.mouse_drag_callbacks.append(self._mouse_click)
-        self._n_points = len(points)
 
         for layer in self._viewer.layers:
             if not isinstance(layer, napari.layers.Image):
@@ -183,22 +200,58 @@ class CtBP2Detection(Container):
                 layer.visible = False
 
     def _mouse_click(self, layer, event):
-        if self._viewer.dims.ndisplay == 2:
-            # The position of the point in 3D space will be correct since the
-            # point will be placed on the plane of view.
+        if layer.mode != "pan_zoom":
+            # A tool (e.g., add, remove, select) is being used. Don't interfere
+            # with what's already going on otherwise we may end up with
+            # duplicate points or delete two points.
             return
-        if layer.mode != "add":
-            # Add tool is not currently active.
-            return
+        if event.buttons[0] == 2:
+            if "Shift" in event.modifiers:
+                self._remove_point(layer, event)
+            else:
+                self._add_point(layer, event)
 
-        image_layer = self._image_layer_combo.value
-
-        # Find coordinates where ray enters/exists layer bounding box.
-        near_point, far_point = image_layer.get_ray_intersections(
-            event.position, event.view_direction, event.dims_displayed
+    def _remove_point(self, layer, event):
+        # This seems to handle hit testing. Not thrilled about using an
+        # internal API, but it's styled after
+        # napari.layers.points._points_mouse_bindings.
+        point_index = layer._get_value_(
+            position=event.position,
+            view_direction=event.view_direction,
+            dims_displayed=event.dims_displayed,
+            world=True,
         )
-        if (near_point is None) or (far_point is None):
-            return
+        if point_index is not None:
+            layer.pop(point_index)
+
+    def _add_point(self, layer, event):
+        image_layer = self._image_layer_combo.value
+        if self._viewer.dims.ndisplay == 2:
+            # Logic for handling 2D view.
+            near_point = list(event.position)
+            far_point = list(event.position)
+
+            # Find the axis to project the ray along.
+            ray_axis = ({0, 1, 2} - set(self._viewer.dims.displayed)).pop()
+
+            # Get the thickness of the view. The thickness is the full range
+            # (lower to upper), but point click is in the center.
+            thickness = self._viewer.dims.thickness[ray_axis] / 2
+            near_point[ray_axis] += thickness
+            far_point[ray_axis] -= thickness
+            near_point = image_layer.world_to_data(near_point)
+            far_point = image_layer.world_to_data(far_point)
+            if thickness == 0:
+                layer.add(near_point)
+                return
+        else:
+            # Logic for handling 3D view.
+            # Find coordinates where ray enters/exists layer bounding box.
+            near_point, far_point = image_layer.get_ray_intersections(
+                event.position, event.view_direction, event.dims_displayed
+            )
+            if (near_point is None) or (far_point is None):
+                return
 
         # Calculate intensities along a ray that passes through the layer
         # bounding box. Find the coordinate of the maximum intensity along this
@@ -211,6 +264,4 @@ class CtBP2Detection(Container):
             mode="constant",
             cval=0,
         )
-        coords = ray[intensities.argmax()]
-        layer.data = np.append(layer.data, [coords], axis=0)
-        event.handled = True
+        layer.add(ray[intensities.argmax()])
