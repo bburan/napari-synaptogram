@@ -69,7 +69,6 @@ class CtBP2Detection(Container):
         self._roi_map = {}
         for layer in self._viewer.layers:
             if isinstance(layer, Points):
-                print("adding mouse drag callback", layer)
                 layer.mouse_drag_callbacks.append(self._mouse_click)
             if isinstance(layer, Image):
                 layer.projection_mode = "max"
@@ -91,7 +90,6 @@ class CtBP2Detection(Container):
                     self._image_layer_combo.value = src_layer
                 else:
                     self._image_layer_combo.value = self._roi_map[src_layer]
-                    print("chose", self._roi_map[src_layer])
 
     def _mask(self):
         roi_layer = self._roi_layer_combo.value
