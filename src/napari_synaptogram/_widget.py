@@ -88,12 +88,15 @@ class CtBP2Detection(Container):
             # Make sure we set values accordingly
             if src_layer.name.lower().endswith("ctbp2"):
                 if self._roi_map[src_layer] is None:
-                    self._image_layer_combo.value = layer
+                    self._image_layer_combo.value = src_layer
                 else:
                     self._image_layer_combo.value = self._roi_map[src_layer]
+                    print("chose", self._roi_map[src_layer])
 
     def _mask(self):
         roi_layer = self._roi_layer_combo.value
+        if roi_layer is None:
+            return
 
         for layer in self._viewer.layers[:]:
             if not isinstance(layer, napari.layers.Image):
@@ -173,8 +176,13 @@ class CtBP2Detection(Container):
                 out_of_slice_display=True,
             )
             layer.mouse_drag_callbacks.append(self._mouse_click)
-            # layer.events.data.connect(self._points_modified)
         self._n_points = len(points)
+
+        for layer in self._viewer.layers:
+            if not isinstance(layer, napari.layers.Image):
+                continue
+            if layer != image_layer:
+                layer.visible = False
 
     def _mouse_click(self, layer, event):
         if self._viewer.dims.ndisplay == 2:
