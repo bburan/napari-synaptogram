@@ -68,11 +68,13 @@ jobs:
 
   deploy:
     # this will run when you have tagged a commit, starting with "v*"
-    # and requires that you have put your twine API key in your
-    # github secrets (see readme for details)
+    name: Publish Python distribution to PyPI
     needs: [test, build-and-inspect-package]
     runs-on: ubuntu-latest
     if: contains(github.ref, 'tags')
+    environment:
+      name: pypi
+      url: https://pypi.org/p/napari-synaptogram
     permissions:
       id-token: write
     steps:
