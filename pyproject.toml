@@ -48,6 +48,7 @@ dev = [
     "pytest-qt",  # https://pytest-qt.readthedocs.io/en/latest/
     "napari[qt]",  # test with napari's default Qt bindings
 	"synaptogram>=0.0.11", # required to read IMS files
+    "cochleogram[czi]>=0.10.2", # required to read CZI files
 ]
 
 [project.entry-points."napari.manifest"]

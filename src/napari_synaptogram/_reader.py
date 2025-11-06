@@ -12,21 +12,13 @@ from pathlib import Path
 
 import pandas as pd
 import tifffile
+from cochleogram.util import load_czi
 from synaptogram import reader
 
 CHANNEL_CONFIG = {
-    "CtBP2": {"display_color": "#FF0000"},
-    "MyosinVIIa": {"display_color": "#0000FF"},
-    "GluR2": {"display_color": "#00FF00"},
-    "GlueR2": {"display_color": "#00FF00"},
-    "PMT": {"display_color": "#FFFFFF"},
-    "DAPI": {"display_color": "#FFFFFF", "visible": False},
-    # Channels are tagged as unknown if there's difficulty parsing the channel
-    # information from the file.
-    "Unknown 1": {"display_color": "#FF0000"},
-    "Unknown 2": {"display_color": "#00FF00"},
-    "Unknown 3": {"display_color": "#0000FF"},
-    "Unknown 4": {"display_color": "#FFFFFF"},
+    "CtBP2": {"colormap": "red"},
+    "MyosinVIIa": {"colormap": "blue"},
+    "GluR2": {"colormap": "green"},
 }
 
 
@@ -52,6 +44,8 @@ def napari_get_reader(path):
 
     if path.endswith(".ims"):
         return ims_reader_function
+    elif path.endswith(".czi"):
+        return czi_reader_function
     elif path.endswith(".syn"):
         return syn_reader_function
     return None
@@ -87,21 +81,67 @@ def ims_reader_function(path):
         path = Path(path)
         fh = reader.ImarisReader(path)
         metadata = {"filename": path}
-        # axes_order = [1, 0, 2, 3]
-        # img = fh.image.copy()[axes_order]
         img = fh.image.copy()
-        # contrast_limits = np.percentile(img, [1, 99], axis=[0, 1, 2]).T / 255
-        #'contrast_limits': contrast_limits.tolist(),
-        # names = [path.stem + ' ' + c['name'] for c in fh.channel_names]
         names = [c["name"] for c in fh.channel_names]
+        colormap = [
+            CHANNEL_CONFIG.get(c, {}).get("colormap", None) for c in names
+        ]
         metadata = {
             "name": names,
-            "colormap": ["green", "red", "blue"],
+            "colormap": colormap,
             "scale": fh.image_info["voxel_size"],
             "channel_axis": -1,
             "axis_labels": ["X", "Y", "Z"],
         }
         data.append((img, metadata, "image"))
+
+    return data
+
+
+def czi_reader_function(path):
+    """Take a path or list of paths and return a list of LayerData tuples.
+
+    Readers are expected to return data as a list of tuples, where each tuple
+    is (data, [add_kwargs, [layer_type]]), "add_kwargs" and "layer_type" are
+    both optional.
+
+    Parameters
+    ----------
+    path : str or list of str
+        Path to file, or list of paths.
+
+    Returns
+    -------
+    layer_data : list of tuples
+        A list of LayerData tuples where each tuple in the list contains
+        (data, metadata, layer_type), where data is a numpy array, metadata is
+        a dict of keyword arguments for the corresponding viewer.add_* method
+        in napari, and layer_type is a lower-case string naming the type of
+        layer. Both "meta", and "layer_type" are optional. napari will
+        default to layer_type=="image" if not provided
+    """
+    # handle both a string and a list of strings
+    paths = [path] if isinstance(path, str) else path
+
+    data = []
+    for path in paths:
+        info, img = load_czi(path)
+        names = [c["name"] for c in info["channels"]]
+        colormap = [
+            CHANNEL_CONFIG.get(c, {}).get("colormap", None) for c in names
+        ]
+        metadata = {
+            "name": names,
+            "colormap": colormap,
+            "scale": info["voxel_size"],
+            "channel_axis": -1,
+            "axis_labels": ["X", "Y", "Z"],
+        }
+        # The reader in cochleogram swaps the order of the y-axis for
+        # compatibility with some transforms defined in that GUI. Swap  back so
+        # we are consistent with the same data if read from Imaris after
+        # conversion.
+        data.append((img[:, ::-1, :, :], metadata, "image"))
 
     return data
 

@@ -21,7 +21,7 @@ contributions:
   readers:
     - command: napari-synaptogram.get_reader
       accepts_directories: false
-      filename_patterns: ['*.ims','*.syn']
+      filename_patterns: ['*.ims','*.syn','*.czi']
   writers:
     - command: napari-synaptogram.write_multiple
       layer_types: ['image*','labels*','points*','shapes*']

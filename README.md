@@ -9,19 +9,9 @@
 [![npe2](https://img.shields.io/badge/plugin-npe2-blue?link=https://napari.org/stable/plugins/index.html)](https://napari.org/stable/plugins/index.html)
 [![Copier](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/copier-org/copier/master/img/badge/badge-grayscale-inverted-border-purple.json)](https://github.com/copier-org/copier)
 
-Evaluate synapse ribbon counts in confocal data
+Tools to count synaptic ribbons in confocal data.
 
 ----------------------------------
-
-This [napari] plugin was generated with [copier] using the [napari-plugin-template] (None).
-
-<!--
-Don't miss the full getting started guide to set up your new package:
-https://github.com/napari/napari-plugin-template#getting-started
-
-and review the napari docs for plugin developers:
-https://napari.org/stable/plugins/index.html
--->
 
 ## Installation
 
@@ -43,8 +33,6 @@ To install latest development version :
 ```
 pip install git+https://github.com/bburan/napari-synaptogram.git
 ```
-
-
 
 ## Contributing
 
