@@ -12,46 +12,23 @@ contributions:
     - id: napari-synaptogram.write_multiple
       python_name: napari_synaptogram._writer:write_multiple
       title: Save multi-layer data with Synaptogram
-    - id: napari-synaptogram.write_single_image
-      python_name: napari_synaptogram._writer:write_single_image
-      title: Save image data with Synaptogram
-    - id: napari-synaptogram.make_sample_data
-      python_name: napari_synaptogram._sample_data:make_sample_data
-      title: Load sample data from Synaptogram
     - id: napari-synaptogram.make_container_widget
-      python_name: napari_synaptogram:ImageThreshold
-      title: Make threshold Container widget
-    - id: napari-synaptogram.make_magic_widget
-      python_name: napari_synaptogram:threshold_magic_widget
-      title: Make threshold magic widget
-    - id: napari-synaptogram.make_function_widget
-      python_name: napari_synaptogram:threshold_autogenerate_widget
-      title: Make threshold function widget
-    - id: napari-synaptogram.make_qwidget
-      python_name: napari_synaptogram:ExampleQWidget
-      title: Make example QWidget
+      python_name: napari_synaptogram:CtBP2Detection
+      title: Detect CtBP2 puncta
+    - id: napari-synaptogram.save_synaptogram
+      python_name: napari_synaptogram._writer:save_synaptogram
+      title: Save Synaptogram
   readers:
     - command: napari-synaptogram.get_reader
       accepts_directories: false
-      filename_patterns: ['*.npy']
+      filename_patterns: ['*.ims','*.syn']
   writers:
     - command: napari-synaptogram.write_multiple
-      layer_types: ['image*','labels*']
-      filename_extensions: []
-    - command: napari-synaptogram.write_single_image
-      layer_types: ['image']
-      filename_extensions: ['.npy']
-  sample_data:
-    - command: napari-synaptogram.make_sample_data
-      display_name: Synaptogram
-      key: unique_id.1
+      layer_types: ['image*','labels*','points*','shapes*']
+      filename_extensions: ['*.syn']
   widgets:
     - command: napari-synaptogram.make_container_widget
-      display_name: Container Threshold
-    - command: napari-synaptogram.make_magic_widget
-      display_name: Magic Threshold
-    - command: napari-synaptogram.make_function_widget
-      autogenerate: true
-      display_name: Autogenerate Threshold
-    - command: napari-synaptogram.make_qwidget
-      display_name: Example QWidget
+      display_name: CtBP2 detection
+  menus:
+    napari/file/io_utilities:
+      - command: napari-synaptogram.save_synaptogram
