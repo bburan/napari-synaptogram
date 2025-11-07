@@ -33,6 +33,8 @@ dependencies = [
     "magicgui",
     "qtpy",
     "scikit-image",
+	"synaptogram>=0.0.11", # required to read IMS files
+    "cochleogram[czi]>=0.10.2", # required to read CZI files
 ]
 
 [project.optional-dependencies]
@@ -47,8 +49,6 @@ dev = [
     "pytest-cov",  # https://pytest-cov.readthedocs.io/en/latest/
     "pytest-qt",  # https://pytest-qt.readthedocs.io/en/latest/
     "napari[qt]",  # test with napari's default Qt bindings
-	"synaptogram>=0.0.11", # required to read IMS files
-    "cochleogram[czi]>=0.10.2", # required to read CZI files
 ]
 
 [project.entry-points."napari.manifest"]
