@@ -21,6 +21,18 @@ CHANNEL_CONFIG = {
     "GluR2": {"colormap": "green"},
 }
 
+DEFAULT_COLORMAPS = ["gray", "green", "red", "blue"]
+
+
+def _resolve_colormaps(names):
+    return [
+        CHANNEL_CONFIG.get(c, {}).get(
+            "colormap",
+            DEFAULT_COLORMAPS[i] if i < len(DEFAULT_COLORMAPS) else "gray",
+        )
+        for i, c in enumerate(names)
+    ]
+
 
 def napari_get_reader(path):
     """A basic implementation of a Reader contribution.
@@ -83,12 +95,9 @@ def ims_reader_function(path):
         metadata = {"filename": path}
         img = fh.image.copy()
         names = [c["name"] for c in fh.channel_names]
-        colormap = [
-            CHANNEL_CONFIG.get(c, {}).get("colormap", None) for c in names
-        ]
         metadata = {
             "name": names,
-            "colormap": colormap,
+            "colormap": _resolve_colormaps(names),
             "scale": fh.image_info["voxel_size"],
             "channel_axis": -1,
             "axis_labels": ["X", "Y", "Z"],
@@ -127,12 +136,9 @@ def czi_reader_function(path):
     for path in paths:
         info, img = load_czi(path)
         names = [c["name"] for c in info["channels"]]
-        colormap = [
-            CHANNEL_CONFIG.get(c, {}).get("colormap", None) for c in names
-        ]
         metadata = {
             "name": names,
-            "colormap": colormap,
+            "colormap": _resolve_colormaps(names),
             "scale": info["voxel_size"],
             "channel_axis": -1,
             "axis_labels": ["X", "Y", "Z"],
