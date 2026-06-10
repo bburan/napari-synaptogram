@@ -9,7 +9,10 @@ Replace code below according to your needs.
 
 from __future__ import annotations
 
+import getpass
+import socket
 from collections.abc import Sequence
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Union
 
@@ -64,8 +67,11 @@ def write_multiple(path: str, data: list[FullLayerData]) -> list[str]:
     image = []
     image_metadata = []
     metadata = {}
+    prior_history = []
     for d, md, lt in data:
         if lt == "image":
+            if not prior_history:
+                prior_history = md.get("metadata", {}).get("history", [])
             image.append(d[..., np.newaxis])
             image_metadata.append(md)
             metadata.setdefault("name", []).append(md["name"])
@@ -106,6 +112,14 @@ def write_multiple(path: str, data: list[FullLayerData]) -> list[str]:
                 "visible": md["visible"],
             }
 
+    metadata["history"] = [
+        *prior_history,
+        {
+            "user": getpass.getuser(),
+            "host": socket.gethostname(),
+            "modified": datetime.now(timezone.utc).isoformat(),
+        },
+    ]
     image = np.concatenate(image, axis=-1)
     tifffile.imwrite(path, image, metadata=metadata)
     return [path]

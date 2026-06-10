@@ -180,6 +180,7 @@ def syn_reader_function(path):
             image = fh.asarray()
             keys = ["name", "colormap", "scale", "visible"]
             image_md = {k: metadata[k] for k in keys}
+            image_md["metadata"] = {"history": metadata.get("history", [])}
             image_md.update(
                 {
                     "channel_axis": -1,
