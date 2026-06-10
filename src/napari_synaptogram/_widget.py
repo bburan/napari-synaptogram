@@ -297,24 +297,24 @@ class CtBP2Detection(Container):
 
             # Affine: input_coord = M @ output_coord + offset.
             # Non-plane axes pass through unchanged. Output index along
-            # img_axes[0] (canvas X) traverses the short edge of the rectangle
-            # in the input; along img_axes[1] (canvas Y) traverses the long
-            # edge. The long edge therefore ends up along the output Y axis.
+            # img_axes[0] (canvas X) traverses the long edge of the rectangle
+            # in the input; along img_axes[1] (canvas Y) traverses the short
+            # edge. The long edge therefore ends up along the output X axis.
             M = np.zeros((ndim, ndim))
             offset = np.zeros(ndim)
             for ax in range(ndim):
                 if ax not in img_axes:
                     M[ax, ax] = 1.0
-            M[img_axes[0], img_axes[0]] = short_hat[0]
-            M[img_axes[0], img_axes[1]] = long_hat[0]
-            M[img_axes[1], img_axes[0]] = short_hat[1]
-            M[img_axes[1], img_axes[1]] = long_hat[1]
+            M[img_axes[0], img_axes[0]] = long_hat[0]
+            M[img_axes[0], img_axes[1]] = short_hat[0]
+            M[img_axes[1], img_axes[0]] = long_hat[1]
+            M[img_axes[1], img_axes[1]] = short_hat[1]
             offset[img_axes[0]] = vp[0, 0]
             offset[img_axes[1]] = vp[0, 1]
 
             output_shape = list(data.shape)
-            output_shape[img_axes[0]] = out_short
-            output_shape[img_axes[1]] = out_long
+            output_shape[img_axes[0]] = out_long
+            output_shape[img_axes[1]] = out_short
 
             layer.data = sp.ndimage.affine_transform(
                 data,
