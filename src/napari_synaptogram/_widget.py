@@ -2,7 +2,7 @@ import napari
 import numpy as np
 import scipy as sp
 from magicgui.widgets import CheckBox, Container, PushButton, create_widget
-from napari.layers import Image, Points
+from napari.layers import Image, Points, Shapes
 from skimage.draw import polygon2mask
 from skimage.feature import blob_log
 from skimage.util import img_as_float
@@ -52,6 +52,13 @@ class CtBP2Detection(Container):
         ]
         self._image_container = Container(widgets=row, layout="vertical")
 
+        self._crop_button = PushButton(text="Crop")
+        self._crop_button.clicked.connect(self._crop)
+        self._crop_container = Container(
+            widgets=[self._crop_button],
+            layout="horizontal",
+        )
+
         self._run_button = PushButton(text="Run")
         self._run_button.clicked.connect(self._detect_points)
         self._threshold_slider.min = 0
@@ -66,6 +73,7 @@ class CtBP2Detection(Container):
             [
                 self._xyz_container,
                 self._image_container,
+                self._crop_container,
                 self._process_container,
             ]
         )
@@ -157,6 +165,168 @@ class CtBP2Detection(Container):
 
             masked_layer.data = layer_data
             masked_layer.visible = True
+
+    def _find_last_rectangle(self):
+        """Return (Shapes layer, shape index) for the most recently drawn
+        rectangle across all Shapes layers, or (None, None) if there is none.
+        """
+        for layer in reversed(list(self._viewer.layers)):
+            if not isinstance(layer, Shapes):
+                continue
+            types = list(layer.shape_type)
+            for idx in range(len(types) - 1, -1, -1):
+                if types[idx] == "rectangle":
+                    return layer, idx
+        return None, None
+
+    def _get_rectangle_geometry(self):
+        """Geometry of the most-recently drawn rectangle, in world coords.
+
+        Reads the rectangle's vertices from layer.data and applies the
+        Shapes layer's full data->world transform chain. This is important
+        because napari's "transform" mode on the layer rotates the displayed
+        shape via layer.rotate / layer.affine without touching layer.data
+        — reading .data alone would miss that rotation.
+
+        Returns None if no rectangle exists. Otherwise returns a dict:
+
+            vertices : (4, 2) world coords in (axes[0], axes[1]) order,
+                in perimeter order — v[1]-v[0] and v[3]-v[0] are the two
+                perpendicular edge vectors.
+            vertices_data : (4, ndim) raw layer.data vertices (pre-transform),
+                in case the caller needs them.
+            axes : list[int] the two world axes the rectangle spans
+                (the third has 0 variance across vertices).
+            center : (2,) centroid in (axes[0], axes[1]) world coords.
+            width, height : float lengths of the v[1]-v[0] and v[3]-v[0] edges.
+            long_length, short_length : max/min of (width, height).
+            angle : rotation of the LONG edge from +axes[0], degrees,
+                normalized to (-90, 90].
+            bbox_min, bbox_max : (2,) axis-aligned bbox of the rotated
+                rectangle in (axes[0], axes[1]) world coords (raw float).
+        """
+        shapes_layer, idx = self._find_last_rectangle()
+        if shapes_layer is None:
+            return None
+
+        vertices_data = np.asarray(shapes_layer.data[idx], dtype=float)
+        # Apply layer.scale/rotate/translate/affine so layer-level rotation
+        # (napari's transform mode) is reflected.
+        rect = np.asarray(
+            shapes_layer._transforms[1:3].simplified(vertices_data),
+            dtype=float,
+        )
+
+        axes = sorted(np.argsort(rect.std(axis=0))[-2:].tolist())
+        v = rect[:, axes]
+
+        e1 = v[1] - v[0]
+        e3 = v[3] - v[0]
+        width = float(np.linalg.norm(e1))
+        height = float(np.linalg.norm(e3))
+        if width >= height:
+            long_edge, long_length, short_length = e1, width, height
+        else:
+            long_edge, long_length, short_length = e3, height, width
+
+        angle = float(np.degrees(np.arctan2(long_edge[1], long_edge[0])))
+        if angle > 90:
+            angle -= 180
+        elif angle <= -90:
+            angle += 180
+
+        return {
+            "vertices": v,
+            "vertices_data": vertices_data,
+            "axes": axes,
+            "center": v.mean(axis=0),
+            "width": width,
+            "height": height,
+            "long_length": long_length,
+            "short_length": short_length,
+            "angle": angle,
+            "bbox_min": v.min(axis=0),
+            "bbox_max": v.max(axis=0),
+        }
+
+    def _crop(self):
+        geom = self._get_rectangle_geometry()
+        if geom is None:
+            return
+        shapes_layer, idx = self._find_last_rectangle()
+
+        # Vertices in world coords (full ndim — includes the slicing axis,
+        # which is constant across all four), so we can map them into each
+        # Image layer's own data space below.
+        world_full = np.asarray(
+            shapes_layer._transforms[1:3].simplified(
+                np.asarray(shapes_layer.data[idx], dtype=float)
+            )
+        )
+
+        for layer in self._viewer.layers:
+            if not isinstance(layer, Image):
+                continue
+            data = layer.data
+            ndim = data.ndim
+
+            # Rectangle vertices in this image's own data coords.
+            v_img = np.array([layer.world_to_data(p) for p in world_full])
+
+            # The two axes the rectangle spans (the third has 0 variance).
+            img_axes = sorted(np.argsort(v_img.std(axis=0))[-2:].tolist())
+            vp = v_img[:, img_axes]
+
+            # napari stores rectangles as 4 vertices in perimeter order, so
+            # vp[1]-vp[0] and vp[3]-vp[0] are the two perpendicular edges.
+            e1 = vp[1] - vp[0]
+            e3 = vp[3] - vp[0]
+            L1 = float(np.linalg.norm(e1))
+            L3 = float(np.linalg.norm(e3))
+            if L1 < 1 or L3 < 1:
+                continue
+            if L3 >= L1:
+                e_long, e_short, L_long, L_short = e3, e1, L3, L1
+            else:
+                e_long, e_short, L_long, L_short = e1, e3, L1, L3
+            long_hat = e_long / L_long
+            short_hat = e_short / L_short
+
+            out_long = int(round(L_long))
+            out_short = int(round(L_short))
+
+            # Affine: input_coord = M @ output_coord + offset.
+            # Non-plane axes pass through unchanged. Output index along
+            # img_axes[0] (canvas X) traverses the short edge of the rectangle
+            # in the input; along img_axes[1] (canvas Y) traverses the long
+            # edge. The long edge therefore ends up along the output Y axis.
+            M = np.zeros((ndim, ndim))
+            offset = np.zeros(ndim)
+            for ax in range(ndim):
+                if ax not in img_axes:
+                    M[ax, ax] = 1.0
+            M[img_axes[0], img_axes[0]] = short_hat[0]
+            M[img_axes[0], img_axes[1]] = long_hat[0]
+            M[img_axes[1], img_axes[0]] = short_hat[1]
+            M[img_axes[1], img_axes[1]] = long_hat[1]
+            offset[img_axes[0]] = vp[0, 0]
+            offset[img_axes[1]] = vp[0, 1]
+
+            output_shape = list(data.shape)
+            output_shape[img_axes[0]] = out_short
+            output_shape[img_axes[1]] = out_long
+
+            layer.data = sp.ndimage.affine_transform(
+                data,
+                M,
+                offset=offset,
+                output_shape=output_shape,
+                order=1,
+            )
+
+        # The rectangle's coords no longer correspond to the new image data.
+        shapes_layer.selected_data = {idx}
+        shapes_layer.remove_selected()
 
     def _update_projection(self):
         if self._max_proj_checkbox.value:
